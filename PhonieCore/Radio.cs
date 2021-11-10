@@ -5,13 +5,13 @@ namespace PhonieCore
 {
     public class Radio
     {
-        private readonly Player _player;
+        private readonly Mp3Player _player;
 
         public Radio()
         {
             Unosquare.RaspberryIO.Pi.Init<BootstrapWiringPi>();
 
-            _player = new Player();
+            _player = new Mp3Player();
 
             var keyListener = new KeyListener();
             keyListener.OnKeyPressed += HandleKeyPressed;
@@ -20,6 +20,13 @@ namespace PhonieCore
             var rfid = new Rfid();
             rfid.CardDetected += HandleCardDetected;
             rfid.NewCardDetected += HandleNewCardDetected;
+            rfid.CardReleased += HandleCardReleased;
+        }
+
+        private void HandleCardReleased(string uid)
+        {
+            Console.WriteLine($"Card Released card: " + uid);
+            _player.Stop();
         }
 
         private void HandleCardDetected(string uid)

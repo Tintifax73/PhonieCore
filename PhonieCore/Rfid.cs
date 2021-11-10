@@ -2,16 +2,23 @@
 using System.Text;
 using System;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace PhonieCore
 {
     public class Rfid
-    {
+    {     
         public delegate void NewCardDetectedHandler(string uid);
         public event NewCardDetectedHandler NewCardDetected;
 
         public delegate void CardDetectedHandler(string uid);
         public event CardDetectedHandler CardDetected;
+        
+        public delegate void CardReleasedHandler(string uid);
+        public event CardReleasedHandler CardReleased;
+
+        private const int AliveTime = 1;
+        private DateTime CardLastSeen = DateTime.MinValue;
 
         public Rfid()
         {
@@ -28,37 +35,61 @@ namespace PhonieCore
                 string lastUid = string.Empty;
                 while (true)
                 {
-                    if (_reader.DetectCard() == RFIDControllerMfrc522.Status.AllOk)
+                    switch(_reader.DetectCard())
                     {
-                        var uidResponse = _reader.ReadCardUniqueId();
-                        if (uidResponse.Status == RFIDControllerMfrc522.Status.AllOk)
-                        {
-                            var cardUid = uidResponse.Data;
-                            _reader.SelectCardUniqueId(cardUid);
+                        case RFIDControllerMfrc522.Status.AllOk:
+                            {
+                                var uidResponse = _reader.ReadCardUniqueId();
 
-                            string currentUid = ByteArrayToString(cardUid);
-                            if(currentUid != lastUid)
+                                switch (uidResponse.Status)
+                                {
+                                    case  RFIDControllerMfrc522.Status.AllOk:
+                                        {
+                                            var cardUid = uidResponse.Data;
+                                            _reader.SelectCardUniqueId(cardUid);
+
+                                            string currentUid = ByteArrayToString(cardUid);
+                                            if(currentUid != lastUid)
+                                            {
+                                                if (!string.IsNullOrEmpty(lastUid))
+                                                {
+                                                    CardReleased.Invoke(lastUid);
+                                                }
+                                                CardLastSeen = DateTime.Now;
+                                                lastUid = currentUid;
+                                                NewCardDetected.Invoke(currentUid);
+                                            }
+                                            else
+                                            {
+                                                CardLastSeen = DateTime.Now;    
+                                                CardDetected.Invoke(currentUid);
+                                            }
+ 
+                                        }
+                                        break;
+                                        /*
+                                    case  RFIDControllerMfrc522.Status.Error:
+                                        {
+                                            if (!string.IsNullOrEmpty(lastUid))
+                                            {
+                                                CardReleased.Invoke(lastUid);
+                                                lastUid=null;
+                                            }
+                                        }        
+                                        break;                            
+                                        */
+                                }
+                            } 
+                            break;
+                        case RFIDControllerMfrc522.Status.Error:                            
                             {
-                                lastUid = currentUid;
-                                NewCardDetected.Invoke(currentUid);
+                                if ((!string.IsNullOrEmpty(lastUid)) && (CardLastSeen.AddSeconds(AliveTime) < DateTime.Now))
+                                {
+                                    CardReleased.Invoke(lastUid);
+                                    lastUid=null;
+                                }
                             }
-                            else
-                            {
-                                CardDetected.Invoke(currentUid);
-                            }
-                        
-                            //try
-                            //{
-                            //    if (_reader.AuthenticateCard1A(cardUid, 7) == RFIDControllerMfrc522.Status.AllOk)
-                            //    {
-                            //        // Read or write data to sector
-                            //    }
-                            //}
-                            //finally
-                            //{
-                            //    _reader.ClearCardSelection();
-                            //}
-                        }
+                            break;
                     }
             }
             }
